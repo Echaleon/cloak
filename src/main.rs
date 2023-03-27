@@ -156,7 +156,8 @@ fn search(
         }
 
         let mut walker = jwalk::WalkDir::new(path)
-            .follow_links(true);
+            .follow_links(true)
+            .skip_hidden(false);
 
         if !recursive {
             walker = walker.max_depth(1);
