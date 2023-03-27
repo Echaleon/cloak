@@ -65,6 +65,11 @@ struct Opts {
     #[clap(short, long)]
     types: Option<Vec<filesystem::ObjectType>>,
 
+    /// Set the number of threads to use. Defaults to the number of logical cores.
+    /// (default: number of logical cores)
+    #[clap(short = 'j', long)]
+    threads: Option<usize>,
+
     /// Path(s) to the directory to hide files and folders in. Defaults to the current directory.
     /// (default: ".")
     #[clap(value_parser)]
@@ -74,6 +79,14 @@ struct Opts {
 fn main() -> Result<()> {
     // Parse the command line arguments
     let opts: Opts = Opts::parse();
+
+    // Set a new global threadpool with the number of threads specified by the user.
+    if let Some(threads) = opts.threads {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build_global()
+            .with_context(|| "Failed to build new threadpool".to_string())?;
+    }
 
     // Get the paths to hide files and folders in. Needs to be arc because it is used in multiple threads.
     let paths = Arc::new(match opts.path {
