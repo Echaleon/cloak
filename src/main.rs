@@ -182,7 +182,9 @@ fn search(
             .into_iter()
             .filter_map(|e| {
                 // If there's an error, print it out and return None.
-                e.map_err(|e| eprintln!("{}", e)).ok()
+                e.with_context(|| "Failed to get path.".to_string())
+                    .map_err(|e| eprintln!("{}", e))
+                    .ok()
             })
             .filter(|e| match types {
                 Some(types) => {
@@ -191,21 +193,27 @@ fn search(
                         eprintln!("{}", e);
                         false
                     })
-                },
+                }
                 None => true,
             })
             .filter(|e| {
                 // If there's an error, print it out and return false. Otherwise, return the result of the matcher.
-                e.path().to_str().map(|p| matcher.matches(p)).unwrap_or_else(|| {
-                    eprintln!("Failed to convert path to string");
-                    false
-                })
+                e.path()
+                    .to_str()
+                    .map(|p| matcher.matches(p))
+                    .unwrap_or_else(|| {
+                        eprintln!(
+                            "{}",
+                            anyhow!("Failed to convert path {} to string", e.path().display())
+                        );
+                        false
+                    })
             })
         {
             // If the test flag is set, then print out the path of the file or folder to hide.
             // Otherwise, hide the file or folder.
             if test {
-                println!("{}", entry.path().display());
+                println!("Would hide {}", entry.path().display());
             } else {
                 if verbose {
                     println!("Hiding {}", entry.path().display());
