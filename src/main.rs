@@ -1,5 +1,5 @@
 use std::path::Path;
-use std::{ops::Deref, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::{anyhow, Context, Result};
 use clap::Parser;
@@ -87,14 +87,14 @@ fn main() -> Result<()> {
         rayon::ThreadPoolBuilder::new()
             .num_threads(threads)
             .build_global()
-            .with_context(|| "Failed to build new threadpool".to_string())?;
+            .with_context(|| "Failed to build new threadpool")?;
     }
 
     // Get the paths to hide files and folders in. Needs to be arc because it is used in multiple threads.
-    let paths = Arc::new(match opts.path {
-        Some(paths) => paths,
-        None => vec![".".to_string()],
-    });
+    let paths = Arc::new(
+        opts.path
+            .map_or_else(|| vec![".".to_owned()], |paths| paths),
+    );
 
     // Get the types of objects to hide. Needs to be arc because it is used in multiple threads.
     let types = Arc::new(opts.types);
@@ -111,39 +111,33 @@ fn main() -> Result<()> {
     // Otherwise, just search for files and folders to hide.
     if opts.watch {
         {
-            let paths = paths.clone();
-            let matcher = matcher.clone();
-            let types = types.clone();
+            let paths = Arc::clone(&paths);
+            let matcher = Arc::clone(&matcher);
+            let types = Arc::clone(&types);
             std::thread::spawn(move || {
                 search(
-                    paths.deref(),
-                    matcher.deref(),
-                    match types.deref() {
-                        Some(types) => Some(types.deref()),
-                        None => None,
-                    },
+                    &paths,
+                    &matcher,
+                    (*types).as_deref(),
                     opts.recursive,
                     opts.test,
                     opts.verbose,
-                )
+                );
             });
         }
         watch(
-            paths.deref(),
-            matcher,
-            types,
+            &paths,
+            &matcher,
+            &types,
             opts.recursive,
             opts.test,
             opts.verbose,
         )
     } else {
         search(
-            paths.deref(),
-            matcher.deref(),
-            match types.deref() {
-                Some(types) => Some(types.deref()),
-                None => None,
-            },
+            &paths,
+            &matcher,
+            (*types).as_deref(),
             opts.recursive,
             opts.test,
             opts.verbose,
@@ -164,7 +158,7 @@ fn search(
     // Iterate over the root paths using jwalk
     for path in paths {
         if verbose {
-            println!("Searching for files and folders to hide in {}", path);
+            println!("Searching for files and folders to hide in {path}");
         }
 
         let mut walker = jwalk::WalkDir::new(path)
@@ -181,32 +175,31 @@ fn search(
             .into_iter()
             .filter_map(|e| {
                 // If there's an error, print it out and return None.
-                e.with_context(|| "Failed to get path.".to_string())
-                    .map_err(|e| eprintln!("{}", e))
+                e.with_context(|| "Failed to get path.")
+                    .map_err(|e| eprintln!("{e}"))
                     .ok()
             })
-            .filter(|e| match types {
-                Some(types) => {
+            .filter(|e| {
+                types.map_or(true, |types| {
                     // If there's an error, print it out and return false.
-                    filesystem::matches_type(e.path().deref(), types).unwrap_or_else(|e| {
-                        eprintln!("{}", e);
+                    filesystem::matches_type(&e.path(), types).unwrap_or_else(|e| {
+                        eprintln!("{e}");
                         false
                     })
-                }
-                None => true,
+                })
             })
             .filter(|e| {
                 // If there's an error, print it out and return false. Otherwise, return the result of the matcher.
-                e.path()
-                    .to_str()
-                    .map(|p| matcher.matches(p))
-                    .unwrap_or_else(|| {
+                e.path().to_str().map_or_else(
+                    || {
                         eprintln!(
                             "{}",
                             anyhow!("Failed to convert path {} to string", e.path().display())
                         );
                         false
-                    })
+                    },
+                    |p| matcher.matches(p),
+                )
             })
         {
             // If the test flag is set, then print out the path of the file or folder to hide.
@@ -217,7 +210,9 @@ fn search(
                 if verbose {
                     println!("Hiding {}", entry.path().display());
                 }
-                filesystem::hide(entry.path().deref()).unwrap();
+                filesystem::hide(&entry.path())
+                    .map_err(|e| eprintln!("{e}"))
+                    .ok();
             }
         }
     }
@@ -226,8 +221,8 @@ fn search(
 // Function to watch for changes and hide files and folders
 fn watch(
     paths: &[String],
-    matcher: Arc<matcher::Matcher>,
-    types: Arc<Option<Vec<filesystem::ObjectType>>>,
+    matcher: &Arc<matcher::Matcher>,
+    types: &Arc<Option<Vec<filesystem::ObjectType>>>,
     recursive: bool,
     test: bool,
     verbose: bool,
@@ -238,7 +233,7 @@ fn watch(
     // Create a new watcher
     let mut watcher: RecommendedWatcher = Watcher::new(tx, notify::Config::default())
         .with_context(|| {
-            "Failed to create new watcher. Make sure you have the required permissions.".to_string()
+            "Failed to create new watcher. Make sure you have the required permissions."
         })?;
 
     // Add the paths to watch to the watcher
@@ -253,39 +248,31 @@ fn watch(
                 },
             )
             .with_context(|| {
-                format!(
-                    "Failed to watch path {}. Make sure you have the required permissions",
-                    path
-                )
+                format!("Failed to watch path {path}. Make sure you have the required permissions")
             })?;
     }
 
     // Begin looping infinitely through the events received from the watcher
     loop {
-        let event = rx
-            .recv()
-            .with_context(|| "Critical error in watcher".to_string())?;
+        let event = rx.recv().with_context(|| "Critical error in watcher")?;
 
         // If the the event is an error, print it out and continue to the next event, otherwise
         // pass the event to the rayon thread pool to handle.
         match event {
             Ok(event) => {
-                let matcher = matcher.clone();
-                let types = types.clone();
+                let matcher = Arc::clone(matcher);
+                let types = Arc::clone(types);
                 rayon::spawn(move || {
                     handle_event(
-                        event,
-                        matcher.deref(),
-                        match types.deref() {
-                            Some(types) => Some(types.deref()),
-                            None => None,
-                        },
+                        &event,
+                        &matcher,
+                        (*types).as_deref(),
                         test,
                         verbose,
-                    )
+                    );
                 });
             }
-            Err(e) => eprintln!("{}", e),
+            Err(e) => eprintln!("{e}"),
         }
     }
 }
@@ -293,7 +280,7 @@ fn watch(
 // Helper function for the watch function that is run on the rayon thread pool. It does the actual
 // handling of the events.
 fn handle_event(
-    event: notify::Event,
+    event: &notify::Event,
     matcher: &matcher::Matcher,
     types: Option<&[filesystem::ObjectType]>,
     test: bool,
@@ -302,7 +289,7 @@ fn handle_event(
     // If the event is an error, print it out and continue to the next event or otherwise get
     // the path of the file or folder that was changed.
     let path = match event {
-        event if matches!(event.kind, event::EventKind::Create(_)) => {
+        _ if matches!(event.kind, event::EventKind::Create(_)) => {
             if let Some(path) = event.paths.get(0) {
                 path.clone()
             } else {
@@ -310,14 +297,13 @@ fn handle_event(
                 return;
             }
         }
-        event
-            if matches!(
-                event.kind,
-                event::EventKind::Modify(event::ModifyKind::Name(_))
-            ) && !matches!(
-                event.kind,
-                event::EventKind::Modify(event::ModifyKind::Name(event::RenameMode::From))
-            ) =>
+        _ if matches!(
+            event.kind,
+            event::EventKind::Modify(event::ModifyKind::Name(_))
+        ) && !matches!(
+            event.kind,
+            event::EventKind::Modify(event::ModifyKind::Name(event::RenameMode::From))
+        ) =>
         {
             if let Some(path) = event.paths.get(1) {
                 path.clone()
@@ -337,7 +323,7 @@ fn handle_event(
             Ok(true) => (),
             Ok(false) => return,
             Err(e) => {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 return;
             }
         }
@@ -345,15 +331,12 @@ fn handle_event(
 
     // Check if the path matches the matcher.
     {
-        let path = match path.to_str() {
-            Some(path) => path,
-            None => {
-                eprintln!(
-                    "{}",
-                    anyhow!("Failed to convert path {} to string", path.display())
-                );
-                return;
-            }
+        let Some(path) = path.to_str() else {
+            eprintln!(
+                "{}",
+                anyhow!("Failed to convert path {} to string", path.display())
+            );
+            return;
         };
 
         if !matcher.matches(path) {
@@ -369,6 +352,6 @@ fn handle_event(
         if verbose {
             println!("Hiding {}", path.display());
         }
-        filesystem::hide(&path).unwrap();
+        filesystem::hide(&path).map_err(|e| eprintln!("{e}")).ok();
     }
 }
