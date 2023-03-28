@@ -130,8 +130,8 @@ fn main() -> Result<()> {
         }
         watch(
             paths.deref(),
-            matcher.clone(),
-            types.clone(),
+            matcher,
+            types,
             opts.recursive,
             opts.test,
             opts.verbose,

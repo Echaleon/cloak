@@ -31,7 +31,7 @@ impl Matcher {
                     Some(
                         builder
                             .build()
-                            .with_context(|| format!("Failed to build glob matcher"))?,
+                            .with_context(|| "Failed to build glob matcher".to_string())?,
                     )
                 }
                 None => None,
@@ -47,22 +47,22 @@ impl Matcher {
                     Some(
                         builder
                             .build()
-                            .with_context(|| format!("Failed to build glob exclude matcher"))?,
+                            .with_context(|| "Failed to build glob exclude matcher".to_string())?,
                     )
                 }
                 None => None,
             },
             regexes: match regexes {
                 Some(regexes) => Some(
-                    RegexSet::new(&regexes)
-                        .with_context(|| format!("Failed to build regex matcher"))?,
+                    RegexSet::new(regexes)
+                        .with_context(|| "Failed to build regex matcher".to_string())?,
                 ),
                 None => None,
             },
             regexes_exclude: match regexes_exclude {
                 Some(regexes_exclude) => Some(
-                    RegexSet::new(&regexes_exclude)
-                        .with_context(|| format!("Failed to build regex exclude matcher"))?,
+                    RegexSet::new(regexes_exclude)
+                        .with_context(|| "Failed to build regex exclude matcher".to_string())?,
                 ),
                 None => None,
             },
