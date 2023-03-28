@@ -1,7 +1,9 @@
+use std::path::Path;
 use std::{ops::Deref, sync::Arc};
 
 use anyhow::{anyhow, Context, Result};
-use clap::{Parser, ValueEnum};
+use clap::Parser;
+use notify::{event, RecommendedWatcher, RecursiveMode, Watcher};
 
 mod filesystem;
 mod matcher;
@@ -128,11 +130,8 @@ fn main() -> Result<()> {
         }
         watch(
             paths.deref(),
-            matcher.deref(),
-            match types.deref() {
-                Some(types) => Some(types.deref()),
-                None => None,
-            },
+            matcher.clone(),
+            types.clone(),
             opts.recursive,
             opts.test,
             opts.verbose,
@@ -227,11 +226,149 @@ fn search(
 // Function to watch for changes and hide files and folders
 fn watch(
     paths: &[String],
-    matcher: &matcher::Matcher,
-    types: Option<&[filesystem::ObjectType]>,
+    matcher: Arc<matcher::Matcher>,
+    types: Arc<Option<Vec<filesystem::ObjectType>>>,
     recursive: bool,
     test: bool,
     verbose: bool,
 ) -> Result<()> {
-    todo!()
+    // Open a channel to receive events from the watcher
+    let (tx, rx) = std::sync::mpsc::channel();
+
+    // Create a new watcher
+    let mut watcher: RecommendedWatcher = Watcher::new(tx, notify::Config::default())
+        .with_context(|| {
+            "Failed to create new watcher. Make sure you have the required permissions.".to_string()
+        })?;
+
+    // Add the paths to watch to the watcher
+    for path in paths {
+        watcher
+            .watch(
+                Path::new(path),
+                if recursive {
+                    RecursiveMode::Recursive
+                } else {
+                    RecursiveMode::NonRecursive
+                },
+            )
+            .with_context(|| {
+                format!(
+                    "Failed to watch path {}. Make sure you have the required permissions",
+                    path
+                )
+            })?;
+    }
+
+    // Begin looping infinitely through the events received from the watcher
+    loop {
+        let event = rx
+            .recv()
+            .with_context(|| "Critical error in watcher".to_string())?;
+
+        // If the the event is an error, print it out and continue to the next event, otherwise
+        // pass the event to the rayon thread pool to handle.
+        match event {
+            Ok(event) => {
+                let matcher = matcher.clone();
+                let types = types.clone();
+                rayon::spawn(move || {
+                    handle_event(
+                        event,
+                        matcher.deref(),
+                        match types.deref() {
+                            Some(types) => Some(types.deref()),
+                            None => None,
+                        },
+                        test,
+                        verbose,
+                    )
+                });
+            }
+            Err(e) => eprintln!("{}", e),
+        }
+    }
+}
+
+// Helper function for the watch function that is run on the rayon thread pool. It does the actual
+// handling of the events.
+fn handle_event(
+    event: notify::Event,
+    matcher: &matcher::Matcher,
+    types: Option<&[filesystem::ObjectType]>,
+    test: bool,
+    verbose: bool,
+) {
+    // If the event is an error, print it out and continue to the next event or otherwise get
+    // the path of the file or folder that was changed.
+    let path = match event {
+        event if matches!(event.kind, event::EventKind::Create(_)) => {
+            if let Some(path) = event.paths.get(0) {
+                path.clone()
+            } else {
+                eprintln!("{}", anyhow!("Failed to get path from event"));
+                return;
+            }
+        }
+        event
+            if matches!(
+                event.kind,
+                event::EventKind::Modify(event::ModifyKind::Name(_))
+            ) && !matches!(
+                event.kind,
+                event::EventKind::Modify(event::ModifyKind::Name(event::RenameMode::From))
+            ) =>
+        {
+            if let Some(path) = event.paths.get(1) {
+                path.clone()
+            } else if let Some(path) = event.paths.get(0) {
+                path.clone()
+            } else {
+                eprintln!("{}", anyhow!("Failed to get path from event"));
+                return;
+            }
+        }
+        _ => return,
+    };
+
+    // Check if the path matches the types of objects to hide.
+    if let Some(types) = types {
+        match filesystem::matches_type(&path, types) {
+            Ok(true) => (),
+            Ok(false) => return,
+            Err(e) => {
+                eprintln!("{}", e);
+                return;
+            }
+        }
+    }
+
+    // Check if the path matches the matcher.
+    {
+        let path = match path.to_str() {
+            Some(path) => path,
+            None => {
+                eprintln!(
+                    "{}",
+                    anyhow!("Failed to convert path {} to string", path.display())
+                );
+                return;
+            }
+        };
+
+        if !matcher.matches(path) {
+            return;
+        }
+    }
+
+    // If the test flag is set, then print out the path of the file or folder to hide.
+    // Otherwise, hide the file or folder.
+    if test {
+        println!("Would hide {}", path.display());
+    } else {
+        if verbose {
+            println!("Hiding {}", path.display());
+        }
+        filesystem::hide(&path).unwrap();
+    }
 }
