@@ -11,7 +11,7 @@ codegen-units = 1
 
 [dependencies]
 anyhow = "1.0.70"
-clap = { version = "4.1.13", features = ["derive"] }
+clap = { version = "4.1.13", features = ["derive", "wrap_help"] }
 globset = "0.4.10"
 jwalk = "0.8.1"
 notify = "5.1.0"

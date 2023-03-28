@@ -67,7 +67,7 @@ struct Opts {
     #[clap(short, long)]
     types: Option<Vec<filesystem::ObjectType>>,
 
-    /// Set the number of threads to use. Defaults to the number of logical cores.
+    /// Set the number of threads to use in the thread pool. Still will spawn a small number of threads for other tasks.
     /// (default: number of logical cores)
     #[clap(short = 'j', long)]
     threads: Option<usize>,
