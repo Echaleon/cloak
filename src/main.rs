@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::sync::Arc;
 
 use anyhow::{anyhow, Context, Result};
 use clap::Parser;
@@ -91,53 +90,42 @@ fn main() -> Result<()> {
     }
 
     // Get the paths to hide files and folders in. Needs to be arc because it is used in multiple threads.
-    let paths = Arc::new(
-        opts.path
-            .map_or_else(|| vec![".".to_owned()], |paths| paths),
-    );
-
-    // Get the types of objects to hide. Needs to be arc because it is used in multiple threads.
-    let types = Arc::new(opts.types);
+    let paths = opts
+        .path
+        .map_or_else(|| vec![".".to_owned()], |paths| paths);
 
     // Build a matcher to match files and folders to hide, Needs to be arc because it is used in multiple threads.
-    let matcher = Arc::new(matcher::Matcher::new(
-        opts.pattern,
-        opts.exclude,
-        opts.regex,
-        opts.regex_exclude,
-    )?);
+    let matcher =
+        matcher::Matcher::new(opts.pattern, opts.exclude, opts.regex, opts.regex_exclude)?;
 
     // If the watch flag is set, then spawn a new thread to search for files and folders to hide.
     // Otherwise, just search for files and folders to hide.
     if opts.watch {
-        {
-            let paths = Arc::clone(&paths);
-            let matcher = Arc::clone(&matcher);
-            let types = Arc::clone(&types);
-            std::thread::spawn(move || {
+        std::thread::scope(|s| {
+            s.spawn(|| {
                 search(
                     &paths,
                     &matcher,
-                    (*types).as_deref(),
+                    opts.types.as_deref(),
                     opts.recursive,
                     opts.test,
                     opts.verbose,
                 );
             });
-        }
-        watch(
-            &paths,
-            &matcher,
-            &types,
-            opts.recursive,
-            opts.test,
-            opts.verbose,
-        )
+            watch(
+                &paths,
+                &matcher,
+                opts.types.as_deref(),
+                opts.recursive,
+                opts.test,
+                opts.verbose,
+            )
+        })
     } else {
         search(
             &paths,
             &matcher,
-            (*types).as_deref(),
+            opts.types.as_deref(),
             opts.recursive,
             opts.test,
             opts.verbose,
@@ -221,60 +209,56 @@ fn search(
 // Function to watch for changes and hide files and folders
 fn watch(
     paths: &[String],
-    matcher: &Arc<matcher::Matcher>,
-    types: &Arc<Option<Vec<filesystem::ObjectType>>>,
+    matcher: &matcher::Matcher,
+    types: Option<&[filesystem::ObjectType]>,
     recursive: bool,
     test: bool,
     verbose: bool,
 ) -> Result<()> {
-    // Open a channel to receive events from the watcher
-    let (tx, rx) = std::sync::mpsc::channel();
+    rayon::scope(|s| {
+        // Open a channel to receive events from the watcher
+        let (tx, rx) = std::sync::mpsc::channel();
 
-    // Create a new watcher
-    let mut watcher: RecommendedWatcher = Watcher::new(tx, notify::Config::default())
-        .with_context(|| {
-            "Failed to create new watcher. Make sure you have the required permissions."
-        })?;
-
-    // Add the paths to watch to the watcher
-    for path in paths {
-        watcher
-            .watch(
-                Path::new(path),
-                if recursive {
-                    RecursiveMode::Recursive
-                } else {
-                    RecursiveMode::NonRecursive
-                },
-            )
+        // Create a new watcher
+        let mut watcher: RecommendedWatcher = Watcher::new(tx, notify::Config::default())
             .with_context(|| {
-                format!("Failed to watch path {path}. Make sure you have the required permissions")
+                "Failed to create new watcher. Make sure you have the required permissions."
             })?;
-    }
 
-    // Begin looping infinitely through the events received from the watcher
-    loop {
-        let event = rx.recv().with_context(|| "Critical error in watcher")?;
-
-        // If the the event is an error, print it out and continue to the next event, otherwise
-        // pass the event to the rayon thread pool to handle.
-        match event {
-            Ok(event) => {
-                let matcher = Arc::clone(matcher);
-                let types = Arc::clone(types);
-                rayon::spawn(move || {
-                    handle_event(
-                        &event,
-                        &matcher,
-                        (*types).as_deref(),
-                        test,
-                        verbose,
-                    );
-                });
-            }
-            Err(e) => eprintln!("{e}"),
+        // Add the paths to watch to the watcher
+        for path in paths {
+            watcher
+                .watch(
+                    Path::new(path),
+                    if recursive {
+                        RecursiveMode::Recursive
+                    } else {
+                        RecursiveMode::NonRecursive
+                    },
+                )
+                .with_context(|| {
+                    format!(
+                        "Failed to watch path {path}. Make sure you have the required permissions"
+                    )
+                })?;
         }
-    }
+
+        // Begin looping infinitely through the events received from the watcher
+        loop {
+            let event = rx.recv().with_context(|| "Critical error in watcher")?;
+
+            // If the the event is an error, print it out and continue to the next event, otherwise
+            // pass the event to the rayon thread pool to handle.
+            match event {
+                Ok(event) => {
+                    s.spawn(move |_| {
+                        handle_event(&event, matcher, types, test, verbose);
+                    });
+                }
+                Err(e) => eprintln!("{e}"),
+            }
+        }
+    })
 }
 
 // Helper function for the watch function that is run on the rayon thread pool. It does the actual
