@@ -33,7 +33,7 @@ pub fn search(
                 .try_into_iter()
             {
                 Ok(iter) => break iter,
-                Err(_) if verbose || true => eprintln!(
+                Err(_) if verbose => eprintln!(
                     "Failed to start iteration on path {}. Retrying...",
                     dir.as_ref().display()
                 ),
@@ -56,7 +56,7 @@ pub fn search(
             if test {
                 println!("Would hide {}", entry.path().display());
             } else {
-                if verbose || true {
+                if verbose {
                     println!("Hiding {}", entry.path().display());
                 }
                 filesystem::hide(&entry.path()).unwrap_or_else(|e| eprintln!("{e}"));

@@ -93,7 +93,7 @@ fn handle_event(
     if test {
         println!("Would hide {}", path.display());
     } else {
-        if verbose || true {
+        if verbose {
             println!("Hiding {}", path.display());
         }
         filesystem::hide(&path).unwrap_or_else(|e| eprintln!("{e}"));
