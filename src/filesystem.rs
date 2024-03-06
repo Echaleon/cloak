@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use clap::ValueEnum;
 
 // Enum of types of objects to hide
@@ -9,6 +9,7 @@ pub enum ObjectType {
     File,
     Folder,
     Symlink,
+    Unknown,
 }
 
 // --- public functions --- //
@@ -117,13 +118,10 @@ fn object_type(path: &Path) -> Result<ObjectType> {
     } else if metadata.is_dir() {
         Ok(ObjectType::Folder)
         // Check if the path is a symbolic link
-    } else if metadata.file_type().is_symlink() {
+    } else if metadata.is_symlink() {
         Ok(ObjectType::Symlink)
         // Otherwise, return an error
     } else {
-        Err(anyhow!(
-            "Failed to determine type of path {}",
-            path.display()
-        ))
+        Ok(ObjectType::Unknown)
     }
 }
