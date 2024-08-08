@@ -24,7 +24,7 @@ pub fn matches_type(path: &Path, types: &[ObjectType]) -> Result<bool> {
 }
 
 // Windows only function to hide a file or folder
-#[cfg(target_os = "windows")]
+#[cfg(target_family = "windows")]
 pub fn hide(path: &Path) -> Result<()> {
     use std::{
         io::Error,
@@ -64,7 +64,7 @@ pub fn hide(path: &Path) -> Result<()> {
 }
 
 // Unix only function to hide a file or folder. Just prepends a dot to the file name.
-#[cfg(target_os = "unix")]
+#[cfg(target_family = "unix")]
 pub fn hide(path: &Path) -> Result<()> {
     // Get the file name from the path
     let file_name = path
@@ -101,7 +101,7 @@ pub fn hide(path: &Path) -> Result<()> {
 
 // --- private functions --- //
 
-// Returns the type of an object at a path.
+// Returns the type of object at a path.
 fn object_type(path: &Path) -> Result<ObjectType> {
     // Get the metadata for the path
     let metadata = fs::metadata(path).with_context(|| {

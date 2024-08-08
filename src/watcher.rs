@@ -44,7 +44,7 @@ pub fn watch(
         loop {
             let event = rx.recv().with_context(|| "Critical error in watcher")?;
 
-            // If the the event is an error, print it out and continue to the next event, otherwise
+            // If the event is an error, print it out and continue to the next event, otherwise
             // pass the event to the rayon thread pool to handle.
             match event {
                 Ok(event) => {
