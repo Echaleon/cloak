@@ -79,12 +79,12 @@ fn handle_event(
     };
 
     // Check if the path matches the types of objects to hide.
-    if !filter::file_type_matches(&path, types, verbose) {
+    if !filter::file_type_matches(path, types, verbose) {
         return;
     }
 
     // Check if the path matches the matcher.
-    if !filter::path_matches_pattern(&path, matcher, verbose) {
+    if !filter::path_matches_pattern(path, matcher, verbose) {
         return;
     }
 
@@ -96,7 +96,7 @@ fn handle_event(
         if verbose {
             println!("Hiding {}", path.display());
         }
-        filesystem::hide(&path).unwrap_or_else(|e| eprintln!("{e}"));
+        filesystem::hide(path).unwrap_or_else(|e| eprintln!("{e}"));
     }
 }
 
@@ -107,7 +107,7 @@ fn get_path(event: &notify::Event) -> Option<Result<&PathBuf>> {
         Some(
             event
                 .paths
-                .get(0)
+                .first()
                 .ok_or_else(|| anyhow!("Failed to get path from event")),
         )
     } else if matches!(
@@ -121,7 +121,7 @@ fn get_path(event: &notify::Event) -> Option<Result<&PathBuf>> {
             event
                 .paths
                 .get(1)
-                .or_else(|| event.paths.get(0))
+                .or_else(|| event.paths.first())
                 .ok_or_else(|| anyhow!("Failed to get path from event")),
         )
     } else {
