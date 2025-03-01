@@ -10,11 +10,11 @@ codegen-units = 1
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.95"
-clap = { version = "4.5.23", features = ["derive", "wrap_help"] }
-globset = "0.4.15"
+anyhow = "1.0.96"
+clap = { version = "4.5.31", features = ["derive", "wrap_help"] }
+globset = "0.4.16"
 jwalk = "0.8.1"
-notify = "7.0.0"
+notify = "8.0.0"
 rayon = "1.10.0"
 regex = "1.11.1"
 winapi = { version = "0.3.9", features = ["minwindef", "fileapi", "winnt"] }
