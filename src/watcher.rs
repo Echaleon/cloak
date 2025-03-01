@@ -1,6 +1,6 @@
 use crate::{filesystem, filter, matcher};
-use anyhow::{anyhow, Context, Result};
-use notify::{event, RecommendedWatcher, RecursiveMode, Watcher};
+use anyhow::{Context, Result, anyhow};
+use notify::{RecommendedWatcher, RecursiveMode, Watcher, event};
 use std::path::{Path, PathBuf};
 
 // Function to watch for changes and hide files and folders
@@ -18,9 +18,9 @@ pub fn watch(
 
         // Create a new watcher
         let mut watcher: RecommendedWatcher = Watcher::new(tx, notify::Config::default())
-            .with_context(|| {
-                "Failed to create new watcher. Make sure you have the required permissions."
-            })?;
+            .with_context(
+                || "Failed to create new watcher. Make sure you have the required permissions.",
+            )?;
 
         // Add the paths to watch to the watcher
         for path in paths {

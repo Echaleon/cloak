@@ -1,7 +1,7 @@
-use std::path::Path;
 use crate::filesystem;
 use crate::filesystem::ObjectType;
 use crate::matcher::Matcher;
+use std::path::Path;
 
 // Handler function to check if a path matches the given file_types, handling errors and printing out verbose messages,
 // as necessary.
@@ -32,11 +32,13 @@ pub fn path_matches_pattern(path: &Path, matcher: &Matcher, verbose: bool) -> bo
         if !res.result {
             if let Some(matcher_type) = res.matcher_type {
                 println!(
-                    "Skipping {} because it is excluded by a {matcher_type} pattern", path.display()
+                    "Skipping {} because it is excluded by a {matcher_type} pattern",
+                    path.display()
                 );
             } else {
                 println!(
-                    "Skipping {} because it did not match any patterns", path.display()
+                    "Skipping {} because it did not match any patterns",
+                    path.display()
                 );
             }
         }

@@ -104,12 +104,8 @@ pub fn hide(path: &Path) -> Result<()> {
 // Returns the type of object at a path.
 fn object_type(path: &Path) -> Result<ObjectType> {
     // Get the metadata for the path
-    let metadata = fs::metadata(path).with_context(|| {
-        format!(
-            "Failed to get metadata for path {}",
-            path.display()
-        )
-    })?;
+    let metadata = fs::metadata(path)
+        .with_context(|| format!("Failed to get metadata for path {}", path.display()))?;
 
     // Check if the path is a file
     if metadata.is_file() {

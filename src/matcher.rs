@@ -92,7 +92,7 @@ impl Matcher {
         let (path_str, lossy) = path
             .to_str()
             .map_or_else(|| (path.to_string_lossy(), true), |s| (s.into(), false));
-        
+
         // Short-circuit if there are no patterns
         if self.globs.is_none()
             && self.globs_exclude.is_none()
