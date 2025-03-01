@@ -6,7 +6,7 @@ use crate::matcher::Matcher;
 // Handler function to check if a path matches the given file_types, handling errors and printing out verbose messages,
 // as necessary.
 pub fn file_type_matches(path: &Path, types: Option<&[ObjectType]>, verbose: bool) -> bool {
-    types.map_or(true, |types| {
+    types.is_none_or(|types| {
         // If there's an error, print it out and return false.
         filesystem::matches_type(path, types)
             .inspect(|r| {
